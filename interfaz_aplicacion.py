@@ -7,6 +7,7 @@ ctk.set_default_color_theme("green")
 dispositivo_conectado = "No hay dispositivo conectado"
 control_conectado = "Teclado"
 modo_uso = "Automatico"
+text = "estoy probando una nueva rama en git"
  
 
 class frame_principal(ctk.CTkFrame):
