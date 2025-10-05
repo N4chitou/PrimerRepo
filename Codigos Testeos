@@ -1,0 +1,42 @@
+def lista_camaras (max_index = 5, backend = None, wait_frame = 0.1):
+    camaras_disponibles = []
+    cap_flag = 0
+    if backend == 'dshow':
+        cap_flag = cv2.CAP_DSHOW
+    elif backend == 'msmf':
+        cap_flag = cv2.CAP_MSMF
+    elif backend == "v4l2":
+        cap_flag = cv2.CAP_V4L2
+    else:
+        cap_flag = 0
+    
+    for i in range(max_index):
+        try:
+            if cap_flag:
+                cap = cv2.VideoCapture(i, cap_flag)
+            else:
+                cv2.VideoCapture(i)
+            if not cap.isOpened():
+                cap.release()
+                continue
+# darle un momento para que el dispositivo entregue frames (a veces necesario)
+            if wait_frame:
+                time.sleep(wait_frame)
+            ret, _= cap.read()
+            if ret:
+                camaras_disponibles.append(i)
+            else:
+# opcional: si no leyó frame, podrías descartarla o añadirla según tu criterio
+# aqui se añadio igual pero podrías comentar la siguiente línea para descartarla
+                camaras_disponibles.append(i)  
+        except Exception:
+            # no queremos que una excepción termine todo el bucle
+            pass
+        finally:
+            try:
+                cap.release()
+            except Exception:
+                pass
+    return camaras_disponibles   
+camaras_disponibles = lista_camaras()
+print(camaras_disponibles)   
