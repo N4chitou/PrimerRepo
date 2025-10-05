@@ -1,42 +1,336 @@
-def lista_camaras (max_index = 5, backend = None, wait_frame = 0.1):
-    camaras_disponibles = []
-    cap_flag = 0
-    if backend == 'dshow':
-        cap_flag = cv2.CAP_DSHOW
-    elif backend == 'msmf':
-        cap_flag = cv2.CAP_MSMF
-    elif backend == "v4l2":
-        cap_flag = cv2.CAP_V4L2
-    else:
-        cap_flag = 0
-    
-    for i in range(max_index):
-        try:
-            if cap_flag:
-                cap = cv2.VideoCapture(i, cap_flag)
-            else:
-                cv2.VideoCapture(i)
-            if not cap.isOpened():
-                cap.release()
-                continue
-# darle un momento para que el dispositivo entregue frames (a veces necesario)
-            if wait_frame:
-                time.sleep(wait_frame)
-            ret, _= cap.read()
-            if ret:
-                camaras_disponibles.append(i)
-            else:
-# opcional: si no leyó frame, podrías descartarla o añadirla según tu criterio
-# aqui se añadio igual pero podrías comentar la siguiente línea para descartarla
-                camaras_disponibles.append(i)  
-        except Exception:
-            # no queremos que una excepción termine todo el bucle
-            pass
-        finally:
-            try:
-                cap.release()
-            except Exception:
-                pass
-    return camaras_disponibles   
-camaras_disponibles = lista_camaras()
-print(camaras_disponibles)   
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RobotIA - Interfaz Web</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#16a34a;--muted:#94a3b8;--white:#e6eef7}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;color:var(--white);background:linear-gradient(180deg,#071026 0%, #071a2b 100%);}
+    .app{max-width:900px;margin:24px auto;padding:18px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));box-shadow:0 6px 30px rgba(2,6,23,0.6)}
+    header{display:flex;align-items:center;justify-content:space-between;padding:8px 12px}
+    h1{font-size:20px;margin:0;color:var(--accent)}
+    nav button{background:transparent;border:1px solid transparent;color:var(--muted);padding:8px 10px;border-radius:8px;margin-left:6px;cursor:pointer}
+    nav button.active{color:var(--white);border-color:rgba(255,255,255,0.06);background:rgba(255,255,255,0.02)}
+    .content{padding:18px}
+    .card{background:var(--card);padding:14px;border-radius:10px;margin-bottom:12px}
+    .controls{display:flex;gap:10px;flex-wrap:wrap}
+    button.ctk{background:var(--accent);border:none;color:#022;padding:8px 12px;border-radius:8px;cursor:pointer}
+    label{display:block;margin-bottom:6px;color:var(--muted)}
+    select,input{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--white);min-width:180px}
+    #videoPreview, #videoControl{width:100%;max-width:640px;height:auto;border-radius:8px;background:#000}
+    .small{font-size:13px;color:var(--muted)}
+    .footer{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+    .back-btn{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);padding:6px 10px;border-radius:8px;cursor:pointer}
+    .badge{display:inline-block;background:rgba(255,255,255,0.03);padding:4px 8px;border-radius:999px;color:var(--muted);font-size:13px}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .hidden{display:none}
+    .danger{color:#ff7b7b}
+    footer.small{margin-top:12px;color:var(--muted);font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="app" role="application">
+    <header>
+      <h1>RobotIA XD — Interfaz Web</h1>
+      <nav>
+        <button id="nav-home" class="active">Inicio</button>
+        <button id="nav-control">Control</button>
+        <button id="nav-config">Configuraciones</button>
+        <button id="nav-help">Ayuda</button>
+      </nav>
+    </header>
+
+    <main class="content">
+      <!-- Home -->
+      <section id="view-home" class="view">
+        <div class="card">
+          <h2>Bienvenido al robot</h2>
+          <p class="small">Usa los botones para navegar entre control, configuraciones y ayuda.</p>
+          <div class="controls" style="margin-top:12px">
+            <button class="ctk" id="btn-to-control">Controlar Robot</button>
+            <button class="ctk" id="btn-to-config">Configuraciones</button>
+            <button class="ctk" id="btn-to-help">Ayuda</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Control (muestra cámara en vivo) -->
+      <section id="view-control" class="view hidden">
+        <div class="card">
+          <h2>Control Bluetooth</h2>
+          <p class="small">Preview de la cámara seleccionada para control.</p>
+
+          <div style="margin-top:12px">
+            <video id="videoControl" autoplay playsinline></video>
+            <div id="controlStatus" class="small" style="margin-top:8px">Estado: <span id="controlState">No hay cámara activa</span></div>
+            <div style="margin-top:8px">
+              <button class="ctk" id="control-stop">Detener cámara</button>
+              <button class="back-btn" id="control-back">Volver</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Configuraciones -->
+      <section id="view-config" class="view hidden">
+        <div class="card">
+          <h2>Configuraciones del Robot</h2>
+          <p class="small">Ajusta dispositivo, mando, modo y cámara.</p>
+
+          <div style="margin-top:12px">
+            <div class="row">
+              <div>
+                <label>Dispositivo</label>
+                <div class="badge">No hay dispositivo conectado</div>
+              </div>
+              <div>
+                <label>Mando</label>
+                <div class="badge">Teclado</div>
+              </div>
+              <div>
+                <label>Modo de uso</label>
+                <div class="badge">Automático</div>
+              </div>
+            </div>
+
+            <hr style="margin:14px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)">
+
+            <!-- Sección de cámaras -->
+            <div id="cam-config">
+              <label>Camara</label>
+              <div class="row" style="align-items:center">
+                <div>
+                  <select id="cameraSelect"></select>
+                </div>
+                <div>
+                  <button class="ctk" id="btn-refresh-cameras">Actualizar cámaras</button>
+                </div>
+                <div>
+                  <span class="badge" id="cameraCount">Cámaras: 0</span>
+                </div>
+              </div>
+
+              <div style="margin-top:12px">
+                <video id="videoPreview" autoplay playsinline muted></video>
+                <div id="previewState" class="small" style="margin-top:8px">Elige una cámara para ver la previsualización.</div>
+                <div class="footer">
+                  <button class="back-btn" id="config-back">Volver al frame anterior</button>
+                  <button class="ctk" id="btn-use-camera">Usar esta cámara</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- Ayuda -->
+      <section id="view-help" class="view hidden">
+        <div class="card">
+          <h2>Ayuda</h2>
+          <p class="small">Aquí puedes encontrar información para resolver problemas comunes.</p>
+          <ul class="small">
+            <li>Si la cámara no aparece, revisa permisos del navegador para el sitio.</li>
+            <li>Cierra otras aplicaciones que puedan estar usando la cámara.</li>
+            <li>En dispositivos con varias cámaras (móvil/USB) selecciona la que quieras usar.</li>
+          </ul>
+          <div style="margin-top:12px">
+            <button class="back-btn" id="help-back">Volver</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <footer style="padding:12px 18px">
+      <div class="small">Interfaz convertida desde Python/CustomTkinter → HTML + JavaScript • Hecho para pruebas locales</div>
+    </footer>
+  </div>
+
+  <script>
+    // Navegación simple con historial de views (stack)
+    const views = {
+      home: document.getElementById('view-home'),
+      control: document.getElementById('view-control'),
+      config: document.getElementById('view-config'),
+      help: document.getElementById('view-help')
+    };
+    const navButtons = {
+      home: document.getElementById('nav-home'),
+      control: document.getElementById('nav-control'),
+      config: document.getElementById('nav-config'),
+      help: document.getElementById('nav-help')
+    };
+    const stack = [];
+    function showView(name, push=true){
+      // hide all
+      Object.values(views).forEach(v => v.classList.add('hidden'));
+      // show selected
+      views[name].classList.remove('hidden');
+      // mark nav
+      Object.values(navButtons).forEach(b => b.classList.remove('active'));
+      if(navButtons[name]) navButtons[name].classList.add('active');
+      if(push) stack.push(name);
+    }
+    function goBack(){
+      if(stack.length>1){
+        stack.pop();
+        const prev = stack[stack.length-1];
+        showView(prev, false);
+      } else {
+        showView('home', false);
+      }
+    }
+
+    // wire header/nav
+    navButtons.home.addEventListener('click', () => showView('home'));
+    navButtons.control.addEventListener('click', () => showView('control'));
+    navButtons.config.addEventListener('click', () => showView('config'));
+    navButtons.help.addEventListener('click', () => showView('help'));
+
+    document.getElementById('btn-to-control').addEventListener('click', ()=> showView('control'));
+    document.getElementById('btn-to-config').addEventListener('click', ()=> showView('config'));
+    document.getElementById('btn-to-help').addEventListener('click', ()=> showView('help'));
+
+    // Back buttons
+    document.getElementById('control-back').addEventListener('click', goBack);
+    document.getElementById('config-back').addEventListener('click', goBack);
+    document.getElementById('help-back').addEventListener('click', goBack);
+
+    // Camera handling
+    const cameraSelect = document.getElementById('cameraSelect');
+    const cameraCount = document.getElementById('cameraCount');
+    const btnRefresh = document.getElementById('btn-refresh-cameras');
+    const videoPreview = document.getElementById('videoPreview');
+    const previewState = document.getElementById('previewState');
+    const btnUse = document.getElementById('btn-use-camera');
+    const videoControl = document.getElementById('videoControl');
+    const controlState = document.getElementById('controlState');
+    const controlStop = document.getElementById('control-stop');
+
+    let currentPreviewStream = null;
+    let currentControlStream = null;
+
+    async function getCameras(){
+      try{
+        // pedir permisos si no se han otorgado aún
+        await navigator.mediaDevices.getUserMedia({video:true}).catch(()=>{});
+      }catch(e){/* ignore */}
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter(d => d.kind === 'videoinput');
+      return cams;
+    }
+
+    async function refreshCameraList(){
+      cameraSelect.innerHTML = '';
+      previewState.textContent = 'Buscando cámaras...';
+      try{
+        const cams = await getCameras();
+        cameraCount.textContent = `Cámaras: ${cams.length}`;
+        if(cams.length===0){
+          previewState.textContent = 'No se detectaron cámaras.';
+          return;
+        }
+        cams.forEach((c, idx) => {
+          const label = c.label || `Cámara ${idx+1}`;
+          const opt = document.createElement('option');
+          opt.value = c.deviceId;
+          opt.textContent = label;
+          cameraSelect.appendChild(opt);
+        });
+        previewState.textContent = `Selecciona una cámara y pulsa ver para previsualizar.`;
+        // auto-preview first
+        startPreview(cameraSelect.value);
+      }catch(err){
+        console.error(err);
+        previewState.textContent = 'Error al listar cámaras. Revisa permisos del navegador.';
+      }
+    }
+
+    btnRefresh.addEventListener('click', refreshCameraList);
+
+    cameraSelect.addEventListener('change', ()=>{
+      startPreview(cameraSelect.value);
+    });
+
+    async function startPreview(deviceId){
+      stopPreview();
+      if(!deviceId){
+        previewState.textContent = 'No hay cámara seleccionada.';
+        return;
+      }
+      try{
+        const constraints = {video: {deviceId: {exact: deviceId}}};
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        currentPreviewStream = stream;
+        videoPreview.srcObject = stream;
+        videoPreview.play().catch(()=>{});
+        previewState.textContent = 'Previsualizando.';
+      }catch(err){
+        console.error(err);
+        previewState.textContent = 'No se pudo acceder a la cámara seleccionada.';
+      }
+    }
+    function stopPreview(){
+      if(currentPreviewStream){
+        currentPreviewStream.getTracks().forEach(t=>t.stop());
+        currentPreviewStream = null;
+      }
+      videoPreview.srcObject = null;
+    }
+
+    // "Usar esta cámara" abre el stream en la sección de control
+    btnUse.addEventListener('click', async ()=>{
+      const deviceId = cameraSelect.value;
+      if(!deviceId){ alert('Selecciona primero una cámara.'); return; }
+      // detener preview pero keep deviceId
+      stopPreview();
+      // abrir en control
+      await startControl(deviceId);
+      showView('control');
+    });
+
+    async function startControl(deviceId){
+      stopControl();
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:deviceId}}});
+        currentControlStream = stream;
+        videoControl.srcObject = stream;
+        videoControl.play().catch(()=>{});
+        controlState.textContent = 'Cámara activa';
+      }catch(err){
+        console.error(err);
+        controlState.textContent = 'No se pudo iniciar la cámara en control.';
+      }
+    }
+    function stopControl(){
+      if(currentControlStream){
+        currentControlStream.getTracks().forEach(t=>t.stop());
+        currentControlStream = null;
+      }
+      videoControl.srcObject = null;
+      controlState.textContent = 'No hay cámara activa';
+    }
+
+    controlStop.addEventListener('click', ()=> stopControl());
+
+    // Iniciar app
+    (async ()=>{
+      stack.push('home');
+      // intentar poblar lista al inicio
+      if(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices){
+        await refreshCameraList();
+      } else {
+        cameraCount.textContent = 'Cámaras: 0';
+        previewState.textContent = 'API de MediaDevices no disponible en este navegador.';
+      }
+    })();
+
+    // limpiar streams al cerrar la ventana
+    window.addEventListener('beforeunload', ()=>{
+      stopPreview(); stopControl();
+    });
+  </script>
+</body>
+</html>
